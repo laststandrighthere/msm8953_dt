@@ -30,9 +30,11 @@
 import init.carrier.rc
 
 on early-init
-    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules audio_apr audio_adsp_loader audio_q6_notifier audio_q6 audio_usf audio_native audio_pinctrl_wcd audio_swr audio_platform audio_swr_ctrl audio_hdmi audio_wcd9xxx audio_wcd_core audio_wsa881x_analog audio_wsa881x audio_mbhc audio_stub audio_digital_cdc audio_analog_cdc audio_wcd_cpe audio_wcd9335 audio_machine_sdm450 audio_machine_ext_sdm450
+    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules audio_apr audio_adsp_loader audio_q6_notifier audio_q6 audio_usf audio_native audio_pinctrl_wcd audio_swr audio_platform audio_swr_ctrl audio_hdmi audio_wcd9xxx audio_wcd_core audio_wsa881x_analog audio_wsa881x audio_mbhc audio_stub audio_digital_cdc audio_analog_cdc audio_wcd_cpe audio_cpe_lsm audio_wcd9335 audio_machine_sdm450 audio_machine_ext_sdm450
+    write /proc/sys/kernel/sched_boost 1
     mkdir /firmware 0771 system system
     mkdir /system 0777 root root
+    mkdir /bt_firmware 0771 system system
     symlink /data/tombstones /tombstones
     mkdir /dsp 0771 media media
 
@@ -43,20 +45,21 @@ on fs
     mount_all /vendor/etc/fstab.qcom
     write /proc/sys/vm/swappiness 100
 
-    # Keeping following partitions outside fstab file. As user may not have
-    # these partition flashed on the device. Failure to mount any partition in fstab file
-    # results in failure to launch late-start class.
-
-    wait /dev/block/bootdevice/by-name/persist
-    mount ext4 /dev/block/bootdevice/by-name/persist /persist noatime nosuid nodev barrier=1
-    mkdir /persist/data 0700 system system
-    mkdir /persist/bms 0700 root system
-    restorecon_recursive /persist
+    chown root system /mnt/vendor/persist
+    chmod 0771 /mnt/vendor/persist
+    mkdir /mnt/vendor/persist/data 0700 system system
+    mkdir /mnt/vendor/persist/bms 0700 root system
+    restorecon_recursive /mnt/vendor/persist
 
     #write /sys/kernel/boot_adsp/boot 1
 
     wait /dev/block/bootdevice/by-name/oem
     mount ext4 /dev/block/bootdevice/by-name/oem /oem ro nosuid nodev barrier=1
+
+on post-fs
+    start qseecomd
+    exec - system system -- /vendor/bin/init.qti.qseecomd.sh
+    write /dev/ipa 1
 
 on post-fs-data
     mkdir /data/tombstones 0771 system system
@@ -68,6 +71,7 @@ on post-fs-data
     mkdir /persist/data/tz 0700 system system
     mkdir /data/misc/dts 0770 media audio
     mkdir /data/vendor/hbtp 0750 system system
+    mkdir /data/vendor/tloc 0700 system drmrpc
 
 
 #Create folder for mm-qcamera-daemon
@@ -80,7 +84,13 @@ service qcamerasvr /system/vendor/bin/mm-qcamera-daemon
     group camera system inet input graphics
 
 on init
-   write /sys/module/qpnp_rtc/parameters/poweron_alarm 1
+    write /dev/stune/foreground/schedtune.sched_boost_no_override 1
+    write /dev/stune/top-app/schedtune.sched_boost_no_override 1
+    write /dev/stune/schedtune.colocate 0
+    write /dev/stune/background/schedtune.colocate 0
+    write /dev/stune/foreground/schedtune.colocate 0
+    write /dev/stune/top-app/schedtune.colocate 1
+    write /sys/module/qpnp_rtc/parameters/poweron_alarm 1
 
 service qfp-daemon /system/vendor/bin/qfp-daemon
    class late_start
@@ -197,13 +207,15 @@ service wcnss-service /system/vendor/bin/wcnss_service
     group system wifi radio
     oneshot
 
-service imsqmidaemon /system/vendor/bin/imsqmidaemon
+## imsdatadaemon starts with root and UID will be downgraded to SYSTEM.
+service vendor.imsqmidaemon /system/vendor/bin/imsqmidaemon
     class main
     user system
     socket ims_qmid stream 0660 system radio
     group radio log diag
 
-service imsdatadaemon /system/vendor/bin/imsdatadaemon
+# imsdatadaemon starts with root and UID will be downgraded to SYSTEM.
+service vendor.imsdatadaemon /system/vendor/bin/imsdatadaemon
     class main
     user system
     socket ims_datad stream 0660 system radio
@@ -211,9 +223,9 @@ service imsdatadaemon /system/vendor/bin/imsdatadaemon
     disabled
 
 on property:vendor.ims.QMI_DAEMON_STATUS=1
-    start imsdatadaemon
+    start vendor.imsdatadaemon
 
-service ims_rtp_daemon /system/vendor/bin/ims_rtp_daemon
+service vendor.ims_rtp_daemon /system/vendor/bin/ims_rtp_daemon
    class main
    user system
    group radio diag inet log
@@ -226,7 +238,7 @@ service vendor.imsrcsservice /system/vendor/bin/imsrcsd
    disabled
 
 on property:vendor.ims.DATA_DAEMON_STATUS=1
-    start ims_rtp_daemon
+    start vendor.ims_rtp_daemon
     start vendor.imsrcsservice
 
 service hbtp /system/vendor/bin/hbtp_daemon
@@ -340,3 +352,8 @@ on boot
     chown system system /sys/class/leds/blue/breath
     chown system system /sys/class/leds/blue/delay_on
     chown system system /sys/class/leds/blue/delay_off
+
+service vendor.tlocd /vendor/bin/tloc_daemon
+    class late_start
+    user system
+    group drmrpc gps net_raw
