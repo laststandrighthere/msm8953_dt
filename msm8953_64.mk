@@ -14,7 +14,12 @@ endif
 
 DEVICE_PACKAGE_OVERLAYS := device/qcom/msm8953_64/overlay
 
-TARGET_USES_NQ_NFC := false
+TARGET_USES_NQ_NFC := true
+
+ifeq ($(TARGET_USES_NQ_NFC),true)
+PRODUCT_COPY_FILES += \
+    device/qcom/common/nfc/libnfc-brcm.conf:$(TARGET_COPY_OUT_VENDOR)/etc/libnfc-nci.conf
+endif
 
 ifneq ($(wildcard kernel/msm-3.18),)
     TARGET_KERNEL_VERSION := 3.18
@@ -165,6 +170,10 @@ PRODUCT_PACKAGES += wcnss_service
 PRODUCT_COPY_FILES += \
 	device/qcom/msm8953_64/init.qti.qseecomd.sh:$(TARGET_COPY_OUT_VENDOR)/bin/init.qti.qseecomd.sh
 
+# VB xml
+PRODUCT_COPY_FILES += \
+        frameworks/native/data/etc/android.software.verified_boot.xml:system/etc/permissions/android.software.verified_boot.xml
+
 # MSM IRQ Balancer configuration file
 PRODUCT_COPY_FILES += \
     device/qcom/msm8953_64/msm_irqbalance.conf:$(TARGET_COPY_OUT_VENDOR)/etc/msm_irqbalance.conf \
@@ -313,4 +322,9 @@ SDM660_DISABLE_MODULE = true
 ifeq ($(BOARD_AVB_ENABLE),false)
 # dm-verity definitions
   PRODUCT_SUPPORTS_VERITY := true
+endif
+
+ifeq ($(strip $(TARGET_KERNEL_VERSION)), 4.9)
+    # Enable vndk-sp Libraries
+    PRODUCT_PACKAGES += vndk_package
 endif
