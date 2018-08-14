@@ -4,7 +4,7 @@ ifneq ($(wildcard kernel/msm-4.9),)
 BOARD_AVB_ENABLE := true
 endif
 
-TARGET_USES_AOSP := true
+TARGET_USES_AOSP := false
 TARGET_USES_AOSP_FOR_AUDIO := false
 TARGET_USES_QCOM_BSP := false
 
@@ -104,6 +104,9 @@ endif
 
 DEVICE_MANIFEST_FILE := device/qcom/msm8953_64/manifest.xml
 DEVICE_MATRIX_FILE   := device/qcom/common/compatibility_matrix.xml
+DEVICE_FRAMEWORK_MANIFEST_FILE := device/qcom/msm8953_64/framework_manifest.xml
+DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE := \
+    device/qcom/common/vendor_framework_compatibility_matrix.xml
 
 # default is nosdcard, S/W button enabled in resource
 PRODUCT_CHARACTERISTICS := nosdcard
@@ -117,7 +120,7 @@ PRODUCT_CHARACTERISTICS := nosdcard
 #endif
 
 ifneq ($(TARGET_DISABLE_DASH), true)
-    PRODUCT_BOOT_JARS += qcmediaplayer
+#    PRODUCT_BOOT_JARS += qcmediaplayer
 endif
 
 #
@@ -138,6 +141,37 @@ PRODUCT_PACKAGES += libGLES_android
 
 # Audio configuration file
 -include $(TOPDIR)hardware/qcom/audio/configs/msm8953/msm8953.mk
+
+#Audio DLKM
+ifeq ($(TARGET_KERNEL_VERSION), 4.9)
+AUDIO_DLKM := audio_apr.ko
+AUDIO_DLKM += audio_q6_notifier.ko
+AUDIO_DLKM += audio_adsp_loader.ko
+AUDIO_DLKM += audio_q6.ko
+AUDIO_DLKM += audio_usf.ko
+AUDIO_DLKM += audio_pinctrl_wcd.ko
+AUDIO_DLKM += audio_swr.ko
+AUDIO_DLKM += audio_wcd_core.ko
+AUDIO_DLKM += audio_swr_ctrl.ko
+AUDIO_DLKM += audio_wsa881x.ko
+AUDIO_DLKM += audio_wsa881x_analog.ko
+AUDIO_DLKM += audio_platform.ko
+AUDIO_DLKM += audio_cpe_lsm.ko
+AUDIO_DLKM += audio_hdmi.ko
+AUDIO_DLKM += audio_stub.ko
+AUDIO_DLKM += audio_wcd9xxx.ko
+AUDIO_DLKM += audio_mbhc.ko
+AUDIO_DLKM += audio_wcd9335.ko
+AUDIO_DLKM += audio_wcd_cpe.ko
+AUDIO_DLKM += audio_digital_cdc.ko
+AUDIO_DLKM += audio_analog_cdc.ko
+AUDIO_DLKM += audio_native.ko
+AUDIO_DLKM += audio_machine_sdm450.ko
+AUDIO_DLKM += audio_machine_ext_sdm450.ko
+AUDIO_DLKM += mpq-adapter.ko
+AUDIO_DLKM += mpq-dmx-hw-plugin.ko
+PRODUCT_PACKAGES += $(AUDIO_DLKM)
+endif
 
 # MIDI feature
 PRODUCT_COPY_FILES += \
@@ -313,6 +347,7 @@ else
 endif
 
 PRODUCT_PROPERTY_OVERRIDES += rild.libpath=/vendor/lib64/libril-qc-qmi-1.so
+PRODUCT_PROPERTY_OVERRIDES += vendor.rild.libpath=/vendor/lib64/libril-qc-qmi-1.so
 
 ifeq ($(ENABLE_AB),true)
 #A/B related packages
@@ -327,6 +362,8 @@ PRODUCT_PACKAGES += update_engine \
 PRODUCT_PACKAGES_DEBUG += bootctl
 endif
 
+TARGET_MOUNT_POINTS_SYMLINKS := false
+
 SDM660_DISABLE_MODULE = true
 # When AVB 2.0 is enabled, dm-verity is enabled differently,
 # below definitions are only required for AVB 1.0
@@ -338,4 +375,7 @@ endif
 ifeq ($(strip $(TARGET_KERNEL_VERSION)), 4.9)
     # Enable vndk-sp Libraries
     PRODUCT_PACKAGES += vndk_package
+    PRODUCT_COMPATIBLE_PROPERTY_OVERRIDE := true
+    TARGET_USES_MKE2FS := true
+    $(call inherit-product, build/make/target/product/product_launched_with_p.mk)
 endif
