@@ -95,6 +95,9 @@ PRODUCT_MODEL := msm8953 for arm64
 
 PRODUCT_BOOT_JARS += tcmiface
 
+# Disable Vulkan feature level 1
+TARGET_NOT_SUPPORT_VULKAN_FEATURE_LEVEL_1 := true
+
 # Kernel modules install path
 KERNEL_MODULES_INSTALL := dlkm
 KERNEL_MODULES_OUT := out/target/product/$(PRODUCT_NAME)/$(KERNEL_MODULES_INSTALL)/lib/modules
