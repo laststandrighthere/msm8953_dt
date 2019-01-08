@@ -290,6 +290,7 @@ on charger
     start qcom-post-boot
     setprop persist.sys.usb.config mass_storage
     start vendor.hvdcp_opti
+    start vendor.power_off_alarm
 
 on charger && property:ro.boot.usbconfigfs=true
     setprop sys.usb.configfs 1
