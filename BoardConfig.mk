@@ -3,11 +3,58 @@
 # Product-specific compile-time definitions.
 #
 
+### Dynamic partition Handling
+ifneq ($(strip $(BOARD_DYNAMIC_PARTITION_ENABLE)),true)
+  ifeq ($(ENABLE_VENDOR_IMAGE), true)
+      BOARD_VENDORIMAGE_PARTITION_SIZE := 1073741824
+  endif
+  BOARD_SYSTEMIMAGE_PARTITION_SIZE := 3221225472
+  BOARD_BUILD_SYSTEM_ROOT_IMAGE := true
+  ifeq ($(ENABLE_AB), true)
+      TARGET_NO_RECOVERY := true
+      BOARD_USES_RECOVERY_AS_BOOT := true
+  else
+      BOARD_RECOVERYIMAGE_PARTITION_SIZE := 0x04000000
+  endif
+else
+# Product partition support
+  TARGET_COPY_OUT_PRODUCT := product
+  BOARD_USES_PRODUCTIMAGE := true
+  BOARD_PRODUCTIMAGE_FILE_SYSTEM_TYPE := ext4
+  # Define the Dynamic Partition sizes and groups.
+  ifeq ($(ENABLE_AB), true)
+    BOARD_SUPER_PARTITION_SIZE := 12884901888
+  else
+    BOARD_SUPER_PARTITION_SIZE := 5318967296
+  endif
+  BOARD_SUPER_PARTITION_GROUPS := qti_dynamic_partitions
+  BOARD_QTI_DYNAMIC_PARTITIONS_SIZE := 5314772992
+  BOARD_QTI_DYNAMIC_PARTITIONS_PARTITION_LIST := system product vendor
+  BOARD_EXT4_SHARE_DUP_BLOCKS := true
+  BOARD_RECOVERYIMAGE_PARTITION_SIZE := 67108864
+
+  # Metadata partition (applicable only for new launches)
+  BOARD_METADATAIMAGE_PARTITION_SIZE := 16777216
+  BOARD_USES_METADATA_PARTITION := true
+endif
+### Dynamic partition Handling
+
+BUILD_BROKEN_ANDROIDMK_EXPORTS :=true
+BUILD_BROKEN_DUP_COPY_HEADERS :=true
+BUILD_BROKEN_DUP_RULES :=true
+BUILD_BROKEN_PHONY_TARGETS :=true
+
+TEMPORARY_DISABLE_PATH_RESTRICTIONS := true
+export TEMPORARY_DISABLE_PATH_RESTRICTIONS
+
 TARGET_BOARD_PLATFORM := msm8953
 # This value will be shown on fastboot menu
 TARGET_BOOTLOADER_BOARD_NAME := msm8953
+# TODO(b/124534788): Temporarily allow eng and debug LOCAL_MODULE_TAGS
+BUILD_BROKEN_ENG_DEBUG_TAGS:=true
 
 TARGET_COMPILE_WITH_MSM_KERNEL := true
+# Enable appended dtb
 TARGET_KERNEL_APPEND_DTB := true
 BOARD_USES_GENERIC_AUDIO := true
 
@@ -53,21 +100,15 @@ AB_OTA_UPDATER := true
 # Full A/B partiton update set
 # AB_OTA_PARTITIONS := xbl rpm tz hyp pmic modem abl boot keymaster cmnlib cmnlib64 system bluetooth
 # Subset A/B partitions for Android-only image update
-AB_OTA_PARTITIONS ?= boot system
-BOARD_BUILD_SYSTEM_ROOT_IMAGE := true
-TARGET_NO_RECOVERY := true
-BOARD_USES_RECOVERY_AS_BOOT := true
+    ifeq ($(ENABLE_VENDOR_IMAGE), true)
+      AB_OTA_PARTITIONS ?= boot system vendor
+    else
+      AB_OTA_PARTITIONS ?= boot system
+    endif
 else
-BOARD_RECOVERYIMAGE_PARTITION_SIZE := 0x04000000
 BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_CACHEIMAGE_PARTITION_SIZE := 268435456
 TARGET_RECOVERY_UPDATER_LIBS += librecovery_updater_msm
-# Enable System As Root even for non-A/B from P onwards
-BOARD_BUILD_SYSTEM_ROOT_IMAGE := true
-endif
-
-ifeq ($(strip $(TARGET_KERNEL_VERSION)), 4.9)
-BOARD_USES_METADATA_PARTITION := true
 endif
 
 ifneq ($(wildcard kernel/msm-3.18),)
@@ -87,13 +128,21 @@ ifneq ($(wildcard kernel/msm-3.18),)
 else ifneq ($(wildcard kernel/msm-4.9),)
     ifeq ($(ENABLE_AB),true)
       ifeq ($(ENABLE_VENDOR_IMAGE), true)
-        TARGET_RECOVERY_FSTAB := device/qcom/msm8953_64/fstabs-4.9/recovery_AB_split_variant.fstab
+        ifeq ($(strip $(BOARD_DYNAMIC_PARTITION_ENABLE)),true)
+          TARGET_RECOVERY_FSTAB := device/qcom/msm8953_64/fstabs-4.9/recovery_AB_dynamic_variant.fstab
+        else
+          TARGET_RECOVERY_FSTAB := device/qcom/msm8953_64/fstabs-4.9/recovery_AB_split_variant.fstab
+        endif
       else
         TARGET_RECOVERY_FSTAB := device/qcom/msm8953_64/fstabs-4.9/recovery_AB_non-split_variant.fstab
       endif
     else
       ifeq ($(ENABLE_VENDOR_IMAGE), true)
-        TARGET_RECOVERY_FSTAB := device/qcom/msm8953_64/fstabs-4.9/recovery_non-AB_split_variant.fstab
+        ifeq ($(strip $(BOARD_DYNAMIC_PARTITION_ENABLE)),true)
+          TARGET_RECOVERY_FSTAB := device/qcom/msm8953_64/fstabs-4.9/recovery_non-AB_dynamic_variant.fstab
+        else
+          TARGET_RECOVERY_FSTAB := device/qcom/msm8953_64/fstabs-4.9/recovery_non-AB_split_variant.fstab
+        endif
       else
         TARGET_RECOVERY_FSTAB := device/qcom/msm8953_64/fstabs-4.9/recovery_non-AB_non-split_variant.fstab
       endif
@@ -104,20 +153,16 @@ endif
 
 TARGET_USERIMAGES_USE_EXT4 := true
 BOARD_BOOTIMAGE_PARTITION_SIZE := 0x04000000
-BOARD_SYSTEMIMAGE_PARTITION_SIZE := 3221225472
 BOARD_USERDATAIMAGE_PARTITION_SIZE := 3112173568
 BOARD_PERSISTIMAGE_PARTITION_SIZE := 33554432
 BOARD_PERSISTIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_OEMIMAGE_PARTITION_SIZE := 268435456
 BOARD_FLASH_BLOCK_SIZE := 131072 # (BOARD_KERNEL_PAGESIZE * 64)
-
 ifeq ($(TARGET_KERNEL_VERSION), 4.9)
-BOARD_METADATAIMAGE_PARTITION_SIZE := 16777216
 BOARD_DTBOIMG_PARTITION_SIZE := 0x0800000
 endif
 
 ifeq ($(ENABLE_VENDOR_IMAGE), true)
-BOARD_VENDORIMAGE_PARTITION_SIZE := 1073741824
 BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := ext4
 TARGET_COPY_OUT_VENDOR := vendor
 BOARD_PROPERTY_OVERRIDES_SPLIT_ENABLED := true
@@ -183,9 +228,9 @@ BOARD_VENDOR_KERNEL_MODULES := \
 endif
 
 ifeq ($(strip $(TARGET_KERNEL_VERSION)), 4.9)
-    BOARD_KERNEL_CMDLINE := console=ttyMSM0,115200,n8 androidboot.console=ttyMSM0 androidboot.hardware=qcom msm_rtb.filter=0x237 ehci-hcd.park=3 lpm_levels.sleep_disabled=1 androidboot.bootdevice=7824900.sdhci earlycon=msm_serial_dm,0x78af000 firmware_class.path=/vendor/firmware_mnt/image androidboot.usbconfigfs=true loop.max_part=7
+    BOARD_KERNEL_CMDLINE := console=ttyMSM0,115200,n8 androidboot.console=ttyMSM0 androidboot.hardware=qcom msm_rtb.filter=0x237 ehci-hcd.park=3 lpm_levels.sleep_disabled=1 androidboot.bootdevice=7824900.sdhci earlycon=msm_serial_dm,0x78af000 androidboot.usbconfigfs=true loop.max_part=7
 else ifeq ($(strip $(TARGET_KERNEL_VERSION)), 3.18)
-    BOARD_KERNEL_CMDLINE := console=ttyHSL0,115200,n8 androidboot.console=ttyHSL0 androidboot.hardware=qcom msm_rtb.filter=0x237 ehci-hcd.park=3 lpm_levels.sleep_disabled=1 androidboot.bootdevice=7824900.sdhci earlycon=msm_hsl_uart,0x78af000 firmware_class.path=/vendor/firmware_mnt/image loop.max_part=7 androidboot.usbconfigfs=false
+    BOARD_KERNEL_CMDLINE := console=ttyHSL0,115200,n8 androidboot.console=ttyHSL0 androidboot.hardware=qcom msm_rtb.filter=0x237 ehci-hcd.park=3 lpm_levels.sleep_disabled=1 androidboot.bootdevice=7824900.sdhci earlycon=msm_hsl_uart,0x78af000 loop.max_part=7 androidboot.usbconfigfs=false
 endif
 #BOARD_KERNEL_SEPARATED_DT := true
 
@@ -198,7 +243,7 @@ BOARD_RAMDISK_OFFSET     := 0x02000000
 
 TARGET_KERNEL_ARCH := arm64
 TARGET_KERNEL_HEADER_ARCH := arm64
-TARGET_KERNEL_CROSS_COMPILE_PREFIX := aarch64-linux-android-
+TARGET_KERNEL_CROSS_COMPILE_PREFIX := $(shell pwd)/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-androidkernel-
 TARGET_USES_UNCOMPRESSED_KERNEL := false
 
 # Shader cache config options
@@ -265,15 +310,32 @@ BOARD_SYSTEMSDK_VERSIONS :=28
 BOARD_VNDK_VERSION := current
 endif
 
+ifeq ($(BOARD_KERNEL_SEPARATED_DTBO), true)
 # Set Header version for bootimage
+ifneq ($(strip $(TARGET_KERNEL_APPEND_DTB)),true)
+#Enable dtb in boot image and Set Header version
+BOARD_INCLUDE_DTB_IN_BOOTIMG := true
+BOARD_BOOTIMG_HEADER_VERSION := 2
+else
 BOARD_BOOTIMG_HEADER_VERSION := 1
+endif
+
 BOARD_MKBOOTIMG_ARGS := --header_version $(BOARD_BOOTIMG_HEADER_VERSION)
+endif
 
 ifneq ($(ENABLE_AB),true)
   ifeq ($(BOARD_KERNEL_SEPARATED_DTBO),true)
-    # Enable DTBO for recovery image
-    BOARD_INCLUDE_RECOVERY_DTBO := true
+      # Enable DTBO for recovery image
+      BOARD_INCLUDE_RECOVERY_DTBO := true
   endif
 endif
 
 TARGET_ENABLE_MEDIADRM_64 := true
+
+
+#################################################################################
+# This is the End of BoardConfig.mk file.
+# Now, Pickup other split Board.mk files:
+#################################################################################
+-include vendor/qcom/defs/board-defs/legacy/*.mk
+#################################################################################

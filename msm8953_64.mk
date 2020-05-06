@@ -1,17 +1,44 @@
 ALLOW_MISSING_DEPENDENCIES=true
+
+# Default A/B configuration.
+ENABLE_AB ?= false
+
+# Dynamic-partition disabled by default
+BOARD_DYNAMIC_PARTITION_ENABLE ?= false
+
+ifeq ($(strip $(BOARD_DYNAMIC_PARTITION_ENABLE)),true)
+PRODUCT_USE_DYNAMIC_PARTITIONS := true
+PRODUCT_PACKAGES += fastbootd
+# Add default implementation of fastboot HAL.
+PRODUCT_PACKAGES += android.hardware.fastboot@1.0-impl-mock
+ifeq ($(ENABLE_AB), true)
+PRODUCT_COPY_FILES += $(LOCAL_PATH)/fstabs-4.9/fstab_AB_dynamic_partition_variant.qti:$(TARGET_COPY_OUT_RAMDISK)/fstab.qcom
+else
+PRODUCT_COPY_FILES += $(LOCAL_PATH)/fstabs-4.9/fstab_non_AB_dynamic_partition_variant.qti:$(TARGET_COPY_OUT_RAMDISK)/fstab.qcom
+endif
+endif
+
 # Enable AVB 2.0
 ifneq ($(wildcard kernel/msm-4.9),)
 BOARD_AVB_ENABLE := true
-# Enable chain partition for system, to facilitate system-only OTA in Treble.
-BOARD_AVB_SYSTEM_KEY_PATH := external/avb/test/data/testkey_rsa2048.pem
-BOARD_AVB_SYSTEM_ALGORITHM := SHA256_RSA2048
-BOARD_AVB_SYSTEM_ROLLBACK_INDEX := 0
-BOARD_AVB_SYSTEM_ROLLBACK_INDEX_LOCATION := 2
+ifeq ($(strip $(BOARD_DYNAMIC_PARTITION_ENABLE)),true)
+# Enable product partition
+PRODUCT_BUILD_PRODUCT_IMAGE := true
+# enable vbmeta_system
+BOARD_AVB_VBMETA_SYSTEM := system product
+BOARD_AVB_VBMETA_SYSTEM_KEY_PATH := external/avb/test/data/testkey_rsa2048.pem
+BOARD_AVB_VBMETA_SYSTEM_ALGORITHM := SHA256_RSA2048
+BOARD_AVB_VBMETA_SYSTEM_ROLLBACK_INDEX := $(PLATFORM_SECURITY_PATCH_TIMESTAMP)
+BOARD_AVB_VBMETA_SYSTEM_ROLLBACK_INDEX_LOCATION := 2
+$(call inherit-product, build/make/target/product/gsi_keys.mk)
+endif
 endif
 
 TARGET_USES_AOSP := false
 TARGET_USES_AOSP_FOR_AUDIO := false
 TARGET_USES_QCOM_BSP := false
+
+TARGET_SYSTEM_PROP := device/qcom/msm8953_64/system.prop
 
 ifeq ($(TARGET_USES_AOSP),true)
 TARGET_DISABLE_DASH := true
@@ -19,7 +46,12 @@ endif
 
 DEVICE_PACKAGE_OVERLAYS := device/qcom/msm8953_64/overlay
 
-TARGET_USES_NQ_NFC := true
+TARGET_USES_NQ_NFC := false
+
+ifeq ($(TARGET_USES_NQ_NFC),true)
+PRODUCT_COPY_FILES += \
+    device/qcom/common/nfc/libnfc-brcm.conf:$(TARGET_COPY_OUT_VENDOR)/etc/libnfc-nci.conf
+endif
 
 ifneq ($(wildcard kernel/msm-3.18),)
     TARGET_KERNEL_VERSION := 3.18
@@ -27,6 +59,13 @@ ifneq ($(wildcard kernel/msm-3.18),)
 else ifneq ($(wildcard kernel/msm-4.9),)
     TARGET_KERNEL_VERSION := 4.9
     $(warning "Build with 4.9 kernel")
+
+#Enable llvm support for kernel
+KERNEL_LLVM_SUPPORT := true
+
+#Enable sd-llvm suppport for kernel
+KERNEL_SD_LLVM_SUPPORT := true
+
 else
     $(warning "Unknown kernel")
 endif
@@ -44,8 +83,6 @@ ifeq ($(ENABLE_VENDOR_IMAGE), true)
 #TARGET_USES_QTIC := false
 endif
 
-# Default A/B configuration.
-ENABLE_AB ?= false
 
 # Enable features in video HAL that can compile only on this platform
 TARGET_USES_MEDIA_EXTENSIONS := true
@@ -64,9 +101,14 @@ PRODUCT_COPY_FILES += \
     device/qcom/msm8953_32/media/media_codecs_performance_8953.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_performance_8953.xml \
     device/qcom/msm8953_32/media/media_profiles_8953_v1.xml:system/etc/media_profiles_8953_v1.xml \
     device/qcom/msm8953_32/media/media_profiles_8953_v1.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_profiles_8953_v1.xml \
-    device/qcom/msm8953_32/media/media_codecs_8953_v1.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_8953_v1.xml \
-    device/qcom/msm8953_32/media/media_codecs_performance_8953_v1.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_performance_8953_v1.xml \
+    device/qcom/msm8953_32/media/media_codecs_8953_v1.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_vendor_v1.xml \
+    device/qcom/msm8953_32/media/media_codecs_performance_8953_v1.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_performance_v1.xml \
     device/qcom/msm8953_32/media/media_codecs_vendor_audio.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_vendor_audio.xml
+
+# Vendor property overrides
+  #Rank OMX SW codecs lower than OMX HW codecs
+  PRODUCT_PROPERTY_OVERRIDES += debug.stagefright.omx_default_rank.sw-audio=1
+  PRODUCT_PROPERTY_OVERRIDES += debug.stagefright.omx_default_rank=0
 endif
 # video seccomp policy files
 # copy to system/vendor as well (since some devices may symlink to system/vendor and not create an actual partition for vendor)
@@ -77,7 +119,8 @@ PRODUCT_COPY_FILES += \
 PRODUCT_PROPERTY_OVERRIDES += \
            dalvik.vm.heapminfree=4m \
            dalvik.vm.heapstartsize=16m \
-           vendor.vidc.disable.split.mode=1
+           vendor.vidc.disable.split.mode=1 \
+           vendor.vidc.enc.disable.pq=true
 $(call inherit-product, frameworks/native/build/phone-xhdpi-2048-dalvik-heap.mk)
 $(call inherit-product, device/qcom/common/common64.mk)
 
@@ -87,9 +130,6 @@ PRODUCT_BRAND := qti
 PRODUCT_MODEL := msm8953 for arm64
 
 PRODUCT_BOOT_JARS += tcmiface
-
-# Disable Vulkan feature level 1
-TARGET_NOT_SUPPORT_VULKAN_FEATURE_LEVEL_1 := true
 
 # Kernel modules install path
 KERNEL_MODULES_INSTALL := dlkm
@@ -101,16 +141,29 @@ PRODUCT_BOOT_JARS += WfdCommon
 #PRODUCT_BOOT_JARS += dpmapi
 #PRODUCT_BOOT_JARS += com.qti.location.sdk
 #Android oem shutdown hook
-PRODUCT_BOOT_JARS += oem-services
+#PRODUCT_BOOT_JARS += oem-services
 endif
 
 DEVICE_MANIFEST_FILE := device/qcom/msm8953_64/manifest.xml
+ifeq ($(ENABLE_AB), true)
+DEVICE_MANIFEST_FILE += device/qcom/msm8953_64/manifest_ab.xml
+endif
+
+ifeq ($(strip $(TARGET_KERNEL_VERSION)), 3.18)
+    DEVICE_MANIFEST_FILE += device/qcom/msm8953_64/manifest_target_level_2.xml
+endif
+ifeq ($(TARGET_KERNEL_VERSION), 4.9)
+    ifeq ($(strip $(BOARD_DYNAMIC_PARTITION_ENABLE)),true)
+        DEVICE_MANIFEST_FILE += device/qcom/msm8953_64/manifest_target_level_4.xml
+    else
+        DEVICE_MANIFEST_FILE += device/qcom/msm8953_64/manifest_target_level_3.xml
+    endif
+endif
+
 DEVICE_MATRIX_FILE   := device/qcom/common/compatibility_matrix.xml
 DEVICE_FRAMEWORK_MANIFEST_FILE := device/qcom/msm8953_64/framework_manifest.xml
 DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE := \
-    device/qcom/common/vendor_framework_compatibility_matrix.xml
-DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE += \
-    device/qcom/msm8953_64/vendor_framework_compatibility_matrix.xml
+    vendor/qcom/opensource/core-utils/vendor_framework_compatibility_matrix.xml
 
 # default is nosdcard, S/W button enabled in resource
 PRODUCT_CHARACTERISTICS := nosdcard
@@ -145,6 +198,8 @@ PRODUCT_PACKAGES += libGLES_android
 
 # Audio configuration file
 -include $(TOPDIR)hardware/qcom/audio/configs/msm8953/msm8953.mk
+
+USE_LIB_PROCESS_GROUP := true
 
 #Audio DLKM
 ifeq ($(TARGET_KERNEL_VERSION), 4.9)
@@ -193,7 +248,7 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     android.hardware.graphics.allocator@2.0-impl \
     android.hardware.graphics.allocator@2.0-service \
-    android.hardware.graphics.mapper@2.0-impl \
+    android.hardware.graphics.mapper@2.0-impl-2.1 \
     android.hardware.graphics.composer@2.1-impl \
     android.hardware.graphics.composer@2.1-service \
     android.hardware.memtrack@1.0-impl \
@@ -243,6 +298,11 @@ PRODUCT_COPY_FILES += \
 
 PRODUCT_PACKAGES += telephony-ext
 PRODUCT_BOOT_JARS += telephony-ext
+
+#Camera QC extends API
+ifeq ($(strip $(TARGET_USES_QTIC_EXTENSION)),true)
+PRODUCT_BOOT_JARS += com.qualcomm.qti.camera
+endif
 
 # Defined the locales
 PRODUCT_LOCALES += th_TH vi_VN tl_PH hi_IN ar_EG ru_RU tr_TR pt_BR bn_IN mr_IN ta_IN te_IN zh_HK \
@@ -294,6 +354,21 @@ PRODUCT_PACKAGES += android.hardware.camera.provider@2.4-impl
 # Enable binderized camera HAL
 PRODUCT_PACKAGES += android.hardware.camera.provider@2.4-service
 
+
+# Enable logdumpd service only for non-perf bootimage
+ifeq ($(findstring perf,$(KERNEL_DEFCONFIG)),)
+    ifeq ($(TARGET_BUILD_VARIANT),user)
+        PRODUCT_DEFAULT_PROPERTY_OVERRIDES+= \
+            ro.logdumpd.enabled=0
+    else
+        #PRODUCT_DEFAULT_PROPERTY_OVERRIDES+= \
+            ro.logdumpd.enabled=1
+    endif
+else
+    PRODUCT_DEFAULT_PROPERTY_OVERRIDES+= \
+        ro.logdumpd.enabled=0
+endif
+
 PRODUCT_PACKAGES += \
     vendor.display.color@1.0-service \
     vendor.display.color@1.0-impl
@@ -338,20 +413,40 @@ endif
 PRODUCT_PROPERTY_OVERRIDES += rild.libpath=/vendor/lib64/libril-qc-qmi-1.so
 PRODUCT_PROPERTY_OVERRIDES += vendor.rild.libpath=/vendor/lib64/libril-qc-qmi-1.so
 
+# privapp-permissions whitelisting
+PRODUCT_PROPERTY_OVERRIDES += ro.control_privapp_permissions=enforce
+
 ifeq ($(ENABLE_AB),true)
 #A/B related packages
 PRODUCT_PACKAGES += update_engine \
                    update_engine_client \
                    update_verifier \
                    bootctrl.msm8953 \
-                   brillo_update_payload \
                    android.hardware.boot@1.0-impl \
                    android.hardware.boot@1.0-service
+
+PRODUCT_HOST_PACKAGES += \
+    brillo_update_payload
+
 #Boot control HAL test app
 PRODUCT_PACKAGES_DEBUG += bootctl
+
+PRODUCT_STATIC_BOOT_CONTROL_HAL := \
+  bootctrl.msm8953 \
+  librecovery_updater_msm \
+  libz \
+  libcutils
+
+PRODUCT_PACKAGES += \
+  update_engine_sideload
 endif
 
 TARGET_MOUNT_POINTS_SYMLINKS := false
+
+ifeq ($(strip $(TARGET_KERNEL_VERSION)), 3.18)
+PRODUCT_HOST_PACKAGES += \
+        AWBTestApp
+endif
 
 SDM660_DISABLE_MODULE = true
 # When AVB 2.0 is enabled, dm-verity is enabled differently,
@@ -373,4 +468,22 @@ ifeq ($(strip $(TARGET_KERNEL_VERSION)), 3.18)
     # Enable extra vendor libs
     ENABLE_EXTRA_VENDOR_LIBS := true
     PRODUCT_PACKAGES += vendor-extra-libs
+    $(call inherit-product, build/make/target/product/product_launched_with_o_mr1.mk)
 endif
+
+# Enable telephpony ims feature
+PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/android.hardware.telephony.ims.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.telephony.ims.xml
+
+###################################################################################
+# This is the End of target.mk file.
+# Now, Pickup other split product.mk files:
+###################################################################################
+$(call inherit-product-if-exists, vendor/qcom/defs/product-defs/legacy/*.mk)
+###################################################################################
+
+# For bringup
+WLAN_BRINGUP_NEW_SP := true
+DISP_BRINGUP_NEW_SP := true
+CAM_BRINGUP_NEW_SP := true
+SEC_USERSPACE_BRINGUP_NEW_SP := true

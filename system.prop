@@ -16,9 +16,9 @@ persist.rild.nitz_short_ons_3=
 ril.subscription.types=NV,RUIM
 DEVICE_PROVISIONED=1
 #
-# Set network mode to (T/L/G/W/1X/EVDO, T/G/W/L) for 7+5 mode device on DSDS mode
+# Set network mode to (T/L/G/W/1X/EVDO, T/L/G/W/1X/EVDO) for 7+7 mode device on DSDS mode
 #
-ro.telephony.default_network=22,20
+ro.telephony.default_network=22,22
 
 debug.sf.enable_hwc_vds=1
 debug.sf.hw=0
@@ -32,6 +32,7 @@ persist.demo.hdmirotationlock=false
 debug.enable.sglscale=1
 debug.gralloc.enable_fb_ubwc=1
 debug.sf.recomputecrop=0
+debug.sf.disable_backpressure=1
 
 #Disable Skip Validate
 sdm.debug.disable_skip_validate=1
@@ -118,18 +119,17 @@ persist.hwc.enable_vds=1
 #selects CoreSight configuration to enable
 persist.debug.coresight.config=stm-events
 
-#property for vendor specific library
-ro.vendor.gt_library=libqti-gt.so
-ro.vendor.at_library=libqti-at.so
-
-#property for game detection feature
-vendor.debug.enable.gamed=0
+#selects Console configuration to enable
+persist.console.silent.config=1
 
 #property to enable narrow search range for video encoding
 vendor.vidc.enc.disable_bframes=1
 vendor.vidc.disable.split.mode=1
 vendor.vidc.dec.downscalar_width=1920
 vendor.vidc.dec.downscalar_height=1088
+
+#prefer HW codec over SW for thumbnail
+media.stagefright.thumbnail.prefer_hw_codecs=true
 
 # system prop for UBWC
 vendor.video.disable.ubwc=1
@@ -146,10 +146,6 @@ persist.mm.sta.enable=0
 #property to enable fingerprint
 persist.qfp=false
 
-#min/max cpu in core control
-ro.vendor.qti.core_ctl_min_cpu=2
-ro.vendor.qti.core_ctl_max_cpu=4
-
 #HWUI properties
 ro.hwui.texture_cache_size=72
 ro.hwui.layer_cache_size=48
@@ -162,25 +158,6 @@ ro.hwui.text_small_cache_width=1024
 ro.hwui.text_small_cache_height=1024
 ro.hwui.text_large_cache_width=2048
 ro.hwui.text_large_cache_height=1024
-
-#Enable B service adj transition by default
-ro.vendor.qti.sys.fw.bservice_enable=true
-ro.vendor.qti.sys.fw.bservice_limit=5
-ro.vendor.qti.sys.fw.bservice_age=5000
-
-#Memperf properties
-ro.memperf.lib=libmemperf.so
-ro.memperf.enable=false
-
-#Trim properties
-ro.vendor.qti.sys.fw.use_trim_settings=true
-ro.vendor.qti.sys.fw.empty_app_percent=50
-ro.vendor.qti.sys.fw.trim_empty_percent=100
-ro.vendor.qti.sys.fw.trim_cache_percent=100
-ro.vendor.qti.sys.fw.trim_enable_memory=2147483648
-
-# Enable Delay Service Restart
-ro.vendor.qti.am.reschedule_service=true
 
 # set cutoff voltage to 3400mV
 ro.cutoff_voltage_mv=3400
@@ -206,18 +183,3 @@ vendor.camera.aux.packagelist=org.codeaurora.snapcam
 
 #set cutoff voltage to 3400mV
 ro.cutoff_voltage_mv=3400
-
-# ro.location properties below are used in conjunction
-# with NLP_MODE setting in /vendor/etc/izat.conf
-# either as the main network provider or as a fallback
-# provider depending on NLP_MODE that is set
-# These properties are optional and will not cause
-# issues if not set to existing packages.
-# ro.location.osnlp.package sets the name of default
-# OS sepecific network location provider package to use
-# ro.location.osnlp.region.package is set to the name
-# of the alternative network location provider package
-# to be used for a particular region where the default
-# network location provider is not functional
-ro.location.osnlp.package=com.google.android.gms
-ro.location.osnlp.region.package=
